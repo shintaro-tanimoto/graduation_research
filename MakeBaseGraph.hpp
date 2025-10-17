@@ -24,17 +24,12 @@ struct ConnectionRule {
     std::vector<std::pair<std::string, std::string>> connections;
 };
 
-// GraphData構造体を拡張
 struct GraphData {
-    tdzdd::Graph full_graph; // 全体の詳細なグラフ
-    std::map<int, Point3D> core_locations; // コアIDからその座標へのマップ
-    // どのコアIDのペアが接続されているかを記録 (重複なし)
+    tdzdd::Graph full_graph;
+    std::map<int, Point3D> core_locations;
     std::set<std::pair<int, int>> core_connectivity;
 };
 
-/**
- * @brief コアグラフと接続ルールに基づき、複合的な3次元グラフとその骨格情報を生成します。
- */
 inline GraphData make_base_graph(
     const CoreGraph& core_graph,
     const std::vector<ConnectionRule>& rules,
@@ -52,15 +47,14 @@ inline GraphData make_base_graph(
     frontier.push_back(origin);
     data.core_locations[origin_core_id] = origin;
 
-    // 詳細グラフに最初のコアを追加
+    std::cerr << "Placed core " << origin_core_id << " at (0, 0, 0)" << std::endl;
     for (int i = 0; i < core_graph.edgeSize(); ++i) {
         const auto& edge = core_graph.edgeInfo(i);
         std::string u_name = std::to_string(origin_core_id) + "_" + core_graph.vertexName(edge.v1);
         std::string v_name = std::to_string(origin_core_id) + "_" + core_graph.vertexName(edge.v2);
         data.full_graph.addEdge(u_name, v_name);
+        std::cerr << "  Connecting " << u_name << " to " << v_name << std::endl;
     }
-    // ▼▼▼ ログ出力 ▼▼▼
-    std::cerr << "Placed core " << origin_core_id << " at (0, 0, 0)" << std::endl;
 
     for (int i = 0; i < n; ++i) {
         std::vector<Point3D> next_frontier;
@@ -79,21 +73,27 @@ inline GraphData make_base_graph(
                     next_frontier.push_back(next_coord);
                     data.core_locations[destination_core_id] = next_coord;
 
+                    std::cerr << "Placed core " << destination_core_id << " at (" << next_coord.x << ", " << next_coord.y << ", " << next_coord.z << ")" << std::endl;
                     for (int j = 0; j < core_graph.edgeSize(); ++j) {
                         const auto& edge = core_graph.edgeInfo(j);
                         std::string u_name = std::to_string(destination_core_id) + "_" + core_graph.vertexName(edge.v1);
                         std::string v_name = std::to_string(destination_core_id) + "_" + core_graph.vertexName(edge.v2);
                         data.full_graph.addEdge(u_name, v_name);
+                        std::cerr << "  Connecting " << u_name << " to " << v_name << std::endl;
                     }
-                    // ▼▼▼ ログ出力 ▼▼▼
-                    std::cerr << "Placed core " << destination_core_id << " at (" << next_coord.x << ", " << next_coord.y << ", " << next_coord.z << ")" << std::endl;
                 }
                 
+                // 接続済みのペアでないかチェック
                 int id1 = std::min(current_core_id, destination_core_id);
                 int id2 = std::max(current_core_id, destination_core_id);
-                if (id1 != id2) {
-                     data.core_connectivity.insert({id1, id2});
+                
+                // id1とid2が同じ場合は自己ループなので何もしない
+                // 既に接続済みのペアなら、このルールでの接続処理をスキップ
+                if (id1 == id2 || data.core_connectivity.count({id1, id2})) {
+                    continue; 
                 }
+                // 新しい接続なので、セットに記録
+                data.core_connectivity.insert({id1, id2});
 
                 // 詳細グラフの辺を追加
                 for (const auto& conn : rule.connections) {
@@ -101,7 +101,6 @@ inline GraphData make_base_graph(
                     std::string v_name = std::to_string(destination_core_id) + "_" + conn.second;
                     data.full_graph.addEdge(u_name, v_name);
                     
-                    // ▼▼▼ 【復活】詳細な接続ログを出力 ▼▼▼
                     std::cerr << "  Connecting " << u_name << " to " << v_name << std::endl;
                 }
             }

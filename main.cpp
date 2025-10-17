@@ -1,11 +1,19 @@
+/*
+todo
+- 座標の多少のずれを許すように計算ルールを変更
+- 入力を別ファイルから読み込むように変更
+- コメントの整理
+*/
+
+
 #include "MakeBaseGraph.hpp"
-#include "ExportGraph.hpp" // ▼▼▼ 新しいヘッダファイルをインクルード ▼▼▼
+#include "ExportGraph.hpp"
 
 int main() {
     // === 1. コアグラフの定義 ===
     CoreGraph core_graph;
     core_graph.addEdge("a", "b");
-    core_graph.addEdge("b", "c");
+    core_graph.addEdge("a", "c");
     core_graph.update();
 
     // === 2. 接続ルールの定義 ===
