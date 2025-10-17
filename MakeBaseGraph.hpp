@@ -3,137 +3,115 @@
 
 #include <vector>
 #include <map>
+#include <set>
 #include <string>
 #include <tuple>
 #include <iostream>
-#include <fstream>
 #include <tdzdd/util/MessageHandler.hpp>
 #include <tdzdd/util/Graph.hpp>
 
-/**
- * @struct Point3D
- * @brief 3次元の座標またはベクトルを表現する構造体。
- * @note std::mapのキーとして使用するため、比較演算子(<)をオーバーロードしています。
- */
+// 座標をdouble型で扱えるように変更
 struct Point3D {
-    int x, y, z; // 座標成分
-
-    // 座標を辞書式順序で比較するための比較演算子
-    bool operator<(const Point3D& other) const {
-        return std::tie(x, y, z) < std::tie(other.x, other.y, other.z);
-    }
+    double x, y, z;
+    bool operator<(const Point3D& other) const { return std::tie(x, y, z) < std::tie(other.x, other.y, other.z); }
+    Point3D operator+(const Point3D& other) const { return {x + other.x, y + other.y, z + other.z}; }
 };
 
-/**
- * @struct GraphData
- * @brief 生成されたグラフとその頂点座標をまとめて保持する構造体。
- */
+using CoreGraph = tdzdd::Graph;
+
+struct ConnectionRule {
+    Point3D vector;
+    std::vector<std::pair<std::string, std::string>> connections;
+};
+
+// GraphData構造体を拡張
 struct GraphData {
-    tdzdd::Graph graph;           // tdzdd形式のグラフデータ
-    std::vector<Point3D> coordinates; // グラフの頂点IDに対応する3D座標のリスト
+    tdzdd::Graph full_graph; // 全体の詳細なグラフ
+    std::map<int, Point3D> core_locations; // コアIDからその座標へのマップ
+    // どのコアIDのペアが接続されているかを記録 (重複なし)
+    std::set<std::pair<int, int>> core_connectivity;
 };
 
 /**
- * @brief 3次元格子状のグラフを指定されたステップ数で生成します。
- * @param vectors グラフの基本構造を定義するベクトル（1頂点から伸びる辺）の集合。
- * @param n グラフを成長させるステップ数（反復回数）。
- * @return 生成されたグラフデータ(GraphData)。
+ * @brief コアグラフと接続ルールに基づき、複合的な3次元グラフとその骨格情報を生成します。
  */
-inline GraphData make_base_graph(const std::vector<Point3D>& vectors, int n) {
-    // グラフ関連の変数を初期化
-    tdzdd::Graph graph;
-    std::map<Point3D, std::string> coord_to_vertex_name; // 座標から頂点名へのマップ
-    std::vector<Point3D> vertex_coordinates;             // 頂点ID(インデックス)から座標へのリスト
-    std::vector<Point3D> frontier;                       // 各ステップで処理対象となる最前線の頂点群
+inline GraphData make_base_graph(
+    const CoreGraph& core_graph,
+    const std::vector<ConnectionRule>& rules,
+    int n)
+{
+    GraphData data;
+    std::map<Point3D, int> coord_to_core_id;
+    std::vector<Point3D> frontier;
+    int next_core_id = 0;
 
-    // 初期設定
-    Point3D origin = {0, 0, 0}; // 原点座標
-    int next_vertex_idx = 0;    // 次に割り当てる頂点ID (インデックス)
-
-    // Step 1: 原点(0,0,0)に最初の頂点を生成
-    std::string origin_name = std::to_string(next_vertex_idx++);
-    coord_to_vertex_name[origin] = origin_name;
-    vertex_coordinates.push_back(origin);
+    Point3D origin = {0, 0, 0};
+    int origin_core_id = next_core_id++;
+    
+    coord_to_core_id[origin] = origin_core_id;
     frontier.push_back(origin);
+    data.core_locations[origin_core_id] = origin;
 
-    // debug
-    std::cout << "Added vertex " << origin_name << " at (0, 0, 0)" << std::endl;
-    std::cout << "<<<<" << std::endl;
+    // 詳細グラフに最初のコアを追加
+    for (int i = 0; i < core_graph.edgeSize(); ++i) {
+        const auto& edge = core_graph.edgeInfo(i);
+        std::string u_name = std::to_string(origin_core_id) + "_" + core_graph.vertexName(edge.v1);
+        std::string v_name = std::to_string(origin_core_id) + "_" + core_graph.vertexName(edge.v2);
+        data.full_graph.addEdge(u_name, v_name);
+    }
+    // ▼▼▼ ログ出力 ▼▼▼
+    std::cerr << "Placed core " << origin_core_id << " at (0, 0, 0)" << std::endl;
 
     for (int i = 0; i < n; ++i) {
-        std::vector<Point3D> next_frontier; // 次のステップのフロンティア
-
-        // 現在のフロンティアにある各頂点からグラフを拡張
+        std::vector<Point3D> next_frontier;
         for (const auto& current_coord : frontier) {
-            std::string u_name = coord_to_vertex_name.at(current_coord);
+            int current_core_id = coord_to_core_id.at(current_coord);
 
-            // 定義された各ベクトル方向に辺を伸ばす
-            for (const auto& vec : vectors) {
-                // 新しい座標を計算
-                Point3D next_coord = {
-                    current_coord.x + vec.x,
-                    current_coord.y + vec.y,
-                    current_coord.z + vec.z
-                };
-                std::string v_name;
+            for (const auto& rule : rules) {
+                Point3D next_coord = current_coord + rule.vector;
+                int destination_core_id;
 
-                // 新しい座標にまだ頂点がなければ、新しい頂点を作成
-                if (coord_to_vertex_name.find(next_coord) == coord_to_vertex_name.end()) {
-                    v_name = std::to_string(next_vertex_idx++);
-                    coord_to_vertex_name[next_coord] = v_name;
-                    vertex_coordinates.push_back(next_coord);
-                    next_frontier.push_back(next_coord); // 新規頂点を次のフロンティアに追加
-
-                    // デバッグ出力
-                    std::cout << "Added vertex " << v_name << " at (" << next_coord.x << ", " << next_coord.y << ", " << next_coord.z << ")" << std::endl;
-                    std::cout << "<<<<" << std::endl;
+                if (coord_to_core_id.count(next_coord)) {
+                    destination_core_id = coord_to_core_id.at(next_coord);
                 } else {
-                    // 座標が既存の場合は、その頂点の名前を取得
-                    v_name = coord_to_vertex_name.at(next_coord);
+                    destination_core_id = next_core_id++;
+                    coord_to_core_id[next_coord] = destination_core_id;
+                    next_frontier.push_back(next_coord);
+                    data.core_locations[destination_core_id] = next_coord;
+
+                    for (int j = 0; j < core_graph.edgeSize(); ++j) {
+                        const auto& edge = core_graph.edgeInfo(j);
+                        std::string u_name = std::to_string(destination_core_id) + "_" + core_graph.vertexName(edge.v1);
+                        std::string v_name = std::to_string(destination_core_id) + "_" + core_graph.vertexName(edge.v2);
+                        data.full_graph.addEdge(u_name, v_name);
+                    }
+                    // ▼▼▼ ログ出力 ▼▼▼
+                    std::cerr << "Placed core " << destination_core_id << " at (" << next_coord.x << ", " << next_coord.y << ", " << next_coord.z << ")" << std::endl;
                 }
                 
-                // 現在の頂点と新しい(または既存の)頂点の間に辺を追加
-                graph.addEdge(u_name, v_name);
+                int id1 = std::min(current_core_id, destination_core_id);
+                int id2 = std::max(current_core_id, destination_core_id);
+                if (id1 != id2) {
+                     data.core_connectivity.insert({id1, id2});
+                }
 
-                // デバッグ出力
-                std::cout << "Added edge between " << u_name << " and " << v_name << std::endl;
-                std::cout << "<<<<" << std::endl;
+                // 詳細グラフの辺を追加
+                for (const auto& conn : rule.connections) {
+                    std::string u_name = std::to_string(current_core_id) + "_" + conn.first;
+                    std::string v_name = std::to_string(destination_core_id) + "_" + conn.second;
+                    data.full_graph.addEdge(u_name, v_name);
+                    
+                    // ▼▼▼ 【復活】詳細な接続ログを出力 ▼▼▼
+                    std::cerr << "  Connecting " << u_name << " to " << v_name << std::endl;
+                }
             }
         }
-        frontier = next_frontier; // フロンティアを更新
-        if (frontier.empty()) break; // 拡張する頂点がなくなったら終了
+        frontier = next_frontier;
+        if (frontier.empty()) break;
     }
 
-    graph.update(); // tdzddグラフの内部構造を最終化
-    return {graph, vertex_coordinates}; // 生成したグラフデータを返す
-}
-
-
-/**
- * @brief tdzdd::GraphオブジェクトをDOT形式でファイルに出力します。
- * @param graph 出力するグラフオブジェクト。
- * @param filename 出力先のファイル名。
- * @note DOT形式はGraphvizなどのツールで可視化できます。
- */
-inline void exportGraphToDot(const tdzdd::Graph& graph, const std::string& filename) {
-    std::ofstream ofs(filename);
-    if (!ofs) {
-        std::cerr << "Error: Cannot open file " << filename << std::endl;
-        return;
-    }
-
-    ofs << "graph G {" << std::endl;
-    ofs << "  node [shape=circle];" << std::endl;
-
-    // グラフの全ての辺をループで処理
-    for (int i = 0; i < graph.edgeSize(); ++i) {
-        const tdzdd::Graph::EdgeInfo& edge = graph.edgeInfo(i);
-        // 辺の両端の頂点名を取得して書き出す
-        ofs << "  \"" << graph.vertexName(edge.v1) << "\" -- \"" << graph.vertexName(edge.v2) << "\";" << std::endl;
-    }
-
-    ofs << "}" << std::endl;
-    std::cout << "Graph data was written to " << filename << std::endl;
+    data.full_graph.update();
+    return data;
 }
 
 #endif // MAKE_BASE_GRAPH_HPP
