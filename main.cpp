@@ -1,30 +1,40 @@
 /*
 todo
-- 座標の多少のずれを許すように計算ルールを変更
-- 入力を別ファイルから読み込むように変更
 - コメントの整理
-*/
 
+How to use
+g++ -o test -Iinclude main.cpp
+./test graph_definitions/10.txt
+dot -Tpng graph_data.dot -o graph_data.png
+*/
 
 #include "MakeBaseGraph.hpp"
 #include "ExportGraph.hpp"
+#include "GraphLoader.hpp"
+#include <exception>
 
-int main() {
-    // === 1. コアグラフの定義 ===
+int main(int argc, char* argv[]) {
+    
+    // === 1. 実行時引数のチェック ===
+    if (argc != 2) {
+        std::cerr << "Usage: " << argv[0] << " <definition_file.txt>" << std::endl;
+        std::cerr << "Example: " << argv[0] << " cubic_lattice.txt" << std::endl;
+        return 1;
+    }
+    std::string definition_file = argv[1];
+
+    // === 2. ファイルからグラフ定義とルールを読み込む ===
     CoreGraph core_graph;
-    core_graph.addEdge("a", "b");
-    core_graph.addEdge("a", "c");
-    core_graph.update();
+    std::vector<ConnectionRule> rules;
 
-    // === 2. 接続ルールの定義 ===
-    std::vector<ConnectionRule> rules = {
-        {{1, 0, 0}, {{"a", "a"}, {"c", "b"}}},
-        {{-1, 0, 0}, {{"a", "a"}, {"b", "c"}}},
-        {{0, 1, 0}, {{"a", "b"}, {"a", "c"}}},
-        {{0, -1, 0}, {{"b", "a"}, {"c", "a"}}},
-        {{0, 0, 1}, {{"a", "a"}, {"b", "b"}, {"c", "c"}}},
-        {{0, 0, -1}, {{"a", "a"}, {"b", "b"}, {"c", "c"}}}
-    };
+    try {
+        std::cerr << "Loading definitions from " << definition_file << "..." << std::endl;
+        loadDefinitions(definition_file, core_graph, rules);
+
+    } catch (const std::exception& e) {
+        std::cerr << "Initialization failed: " << e.what() << std::endl;
+        return 1; // エラーで終了
+    }
 
     // === 3. グラフ生成の実行 ===
     int n = 2; // 成長ステップ数

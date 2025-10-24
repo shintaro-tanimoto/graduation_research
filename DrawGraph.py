@@ -1,9 +1,10 @@
+# -*- coding: utf-8 -*-
+
 """
 Rhino上で EditPythonScript と入力
 このコードをエディタにコピペして実行
 ファイル選択ダイアログで、graph_data.txt を選択
 """
-# -*- coding: utf-8 -*-
 
 import rhinoscriptsyntax as rs
 import Rhino.Geometry as rg
