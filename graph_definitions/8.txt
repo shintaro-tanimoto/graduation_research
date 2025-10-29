@@ -1,0 +1,31 @@
+# --- コアグラフの定義 ---
+CORE_GRAPH
+a b
+a c
+
+# --- 接続ルールの定義 ---
+RULES
+RULE
+VECTOR 0.5 -0.5 0.71
+CONNECT a c
+CONNECT b a
+RULE
+VECTOR -0.5 0.5 -0.71
+CONNECT a b
+CONNECT c a
+RULE
+VECTOR 0.5 0.5 -0.71
+CONNECT a b
+CONNECT c a
+RULE
+VECTOR -0.5 -0.5 0.71
+CONNECT b a
+CONNECT a c
+RULE
+VECTOR 0 1 0
+CONNECT a b
+CONNECT c a
+RULE
+VECTOR 0 -1 0
+CONNECT a c
+CONNECT b a
