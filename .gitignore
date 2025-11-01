@@ -1,3 +1,4 @@
 output/
 *.exec
 .vscode/
+nauty2_9_1/
