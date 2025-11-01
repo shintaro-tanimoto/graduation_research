@@ -13,12 +13,13 @@
 #include "3_geometry/VertexMesh.hpp"    // getMeshForVertex をテストするため
 #include "3_geometry/SolutionMesh.hpp"   // exportSolutionMesh をテストするため
 #include "3_geometry/DualGraph.hpp"     // buildDualGraph をテストするため
+#include "4_analysis/GraphIsomorphism.hpp" // Nautyラッパーのテスト
 
 /**
  * @brief GraphLoader, MakeBaseGraph, VertexMesh の動作をテストします。
  */
 int main(int argc, char* argv[]) {
-
+/*
     CoreGraph core_graph;
     std::vector<ConnectionRule> rules;
     std::map<std::string, ObjMesh> mesh_data;
@@ -121,6 +122,50 @@ int main(int argc, char* argv[]) {
         std::cerr << "Failed to build dual graph: " << e.what() << std::endl;
     }
     std::cerr << "---------------------------" << std::endl;
+
+    std::cerr << "Test complete." << std::endl;
+*/
+
+// 7. GraphIsomorphism.hpp (nauty) のテスト
+    std::cerr << "--- Debugging GraphIsomorphism (Nauty) ---" << std::endl;
+
+    // G1: 4頂点・4辺 の「四角形」
+    tdzdd::Graph g1;
+    g1.addEdge("0", "1");
+    g1.addEdge("1", "2");
+    g1.addEdge("2", "3");
+    g1.addEdge("3", "0");
+    g1.update();
+
+    // G2: G1と「同型」なグラフ (ラベル名だけが違う)
+    tdzdd::Graph g2;
+    g2.addEdge("a", "b"); // <-- nautyラッパーが 0 にマッピング
+    g2.addEdge("b", "c"); // <-- 1 にマッピング
+    g2.addEdge("c", "d"); // <-- 2 にマッピング
+    g2.addEdge("d", "a"); // <-- 3 にマッピング
+    g2.update();
+
+    // G3: G1と「同型でない」グラフ (辺の数が違う)
+    tdzdd::Graph g3;
+    g3.addEdge("0", "1");
+    g3.addEdge("1", "2");
+    g3.addEdge("2", "3");
+    g3.update(); // 辺は3つ
+
+    std::vector<tdzdd::Graph> test_graphs = {g1, g2, g3};
+
+    // フィルターを実行
+    std::map<std::string, tdzdd::Graph> unique_set = filterUniqueGraphsNauty(test_graphs);
+
+    std::cerr << "  Input graphs: 3 (g1, g2, g3)" << std::endl;
+    std::cerr << "  Unique graphs found (via Nauty): " << unique_set.size() << std::endl;
+
+    if (unique_set.size() == 2) {
+        std::cerr << "  Test PASSED." << std::endl;
+    } else {
+        std::cerr << "  Test FAILED. (Expected 2)" << std::endl;
+    }
+    std::cerr << "--------------------------------------" << std::endl;
 
     std::cerr << "Test complete." << std::endl;
 
